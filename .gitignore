@@ -1,0 +1,48 @@
+# Secrets
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+*.pem
+*.p8
+*.key
+secrets/
+.secrets/
+*oauth*token*.json
+service-account*.json
+
+# Private material (see ASSETS.md "Not included")
+private-assets/
+/public/asset-stamp.json
+data/
+logs/
+
+# Generated
+node_modules/
+dist/
+build/
+out/
+output/
+test-results/
+playwright-report/
+.wrangler/
+.vercel/
+.next/
+.turbo/
+cache/
+coverage/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.tsbuildinfo
+
+# Machine
+.DS_Store
+*.log
+
+# >>> assets.mjs: generated from private-assets.json by `node scripts/assets.mjs docs`; do not edit by hand >>>
+/asset-stamp.json
+/private-assets/
+# <<< assets.mjs <<<

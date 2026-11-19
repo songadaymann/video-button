@@ -1,0 +1,3 @@
+# Update.command deliberately pulls current site fixes. The installed versions are
+# reported in the extension; see docs/VERIFICATION.md for the versions tested.
+yt-dlp[default]>=2026.10.26

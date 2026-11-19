@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "tool": "1.3.0",
+  "project": "songadaymann/video-button",
+  "mode": "overlay",
+  "build": {"publicDir": ".", "out": "dist"},
+  "packs": {},
+  "files": {}
+}

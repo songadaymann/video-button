@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "Video Button",
+  "version": "0.1.0",
+  "description": "A download button for videos, powered by a local yt-dlp helper. Best available quality, no cloud service.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA8jjQvGPn7H73Z9Xee+H1giHOlNH9GLec5azdlyPKuw5JzwDTTrYs6ambi/5l9flkmKrsk/buHsWRMlsUhp1Qm0CEG0/zwbCXe4XMy7jjTHvQdyiysQHPRxsMkrSkrfpu1Ow6U6Zp9NnhltFl7Id9F9QfFMI1CNeJleb4UKqyaFtP0mcxBxO4umekVwALaW9UIrKDlOSWd6yf0guedw++ZvXHO7LkQwX2ADERgXMm8c9SPBZnchZUBpGPGuQiFfc9unRB0XIoGhNo74qJVTUuX3l7v6UmTp//gOICFFiQaahfTArZclVjGKnvGhh5qC1NnW4PjIPy4OiDYx+IqpdERwIDAQAB",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "nativeMessaging",
+    "contextMenus"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Video Button"
+  },
+  "options_page": "options.html",
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "targets.js",
+        "content.js"
+      ],
+      "all_frames": true,
+      "run_at": "document_idle"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Video Button</title><link rel="stylesheet" href="ui.css"></head>
+<body class="popup">
+  <header><span class="mark" aria-hidden="true">↓</span><div><h1>Video Button</h1><p>The best version. On your Mac.</p></div><button id="settings" class="quiet" aria-label="Settings" title="Settings">⚙</button></header>
+  <main>
+    <div id="helper" class="connection" role="status">Checking local helper…</div>
+    <button id="download" class="primary">↓ Download this page’s video</button>
+    <p class="hint">Or click “Download video” on a player. Highest available quality, including separate audio.</p>
+    <section id="videos-section" hidden><h2>Videos on this page</h2><div id="videos"></div></section>
+    <section><div class="section-heading"><h2>Downloads</h2><button id="clear" class="link">Clear finished</button></div><div id="jobs" aria-live="polite"></div></section>
+  </main>
+  <footer><button id="folder" class="quiet">Open download folder ↗</button><a href="https://github.com/songadaymann/video-button" target="_blank" rel="noreferrer">Source</a></footer>
+  <script type="module" src="popup.js"></script>
+</body></html>

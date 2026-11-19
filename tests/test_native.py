@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'native'))
-from core import make_options, safe_error, safe_url
+from core import make_options, publish_pair, safe_error, safe_url
 from host import Host, MAX_MESSAGE, read_message
 
 
@@ -27,7 +27,7 @@ class NativeTests(unittest.TestCase):
         data=json.dumps({'action':'hello'}).encode()
         self.assertEqual(read_message(io.BytesIO(struct.pack('=I',len(data))+data)), {'action':'hello'})
 
-    def test_quality_is_not_capped_or_reencoded_and_cookies_are_opt_in(self):
+    def test_quality_is_not_capped_and_cookies_are_opt_in(self):
         with tempfile.TemporaryDirectory() as folder:
             config={'folder':folder,'ffmpeg':'/bin/ffmpeg','node':'/bin/node'}
             args=(config, {'itemIndex':2}, False, '', lambda *_:None, lambda *_:None, lambda *_:None, None)
@@ -36,7 +36,7 @@ class NativeTests(unittest.TestCase):
             self.assertEqual(options['playlist_items'], '2')
             self.assertNotIn('cookiesfrombrowser', options)
             self.assertNotIn('recodevideo', options)
-            self.assertNotIn('merge_output_format', options)
+            self.assertEqual(options['merge_output_format'], 'mkv')
             self.assertEqual(options['format_sort'], ['res','fps'])
             options=make_options(config, {'itemIndex':1}, True, 'Profile 1', None,None,None,None)
             self.assertEqual(options['cookiesfrombrowser'], ('chrome','Profile 1',None,None))
@@ -57,6 +57,24 @@ class NativeTests(unittest.TestCase):
         try:
             with self.assertRaises(ValueError):helper.handle({'action':'exec','command':'echo bad'})
         finally:helper.close()
+
+    def test_export_pair_keeps_existing_downloads_and_uses_matching_names(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary)
+            stage=root/'stage'
+            stage.mkdir()
+            video, audio=stage/'video.mp4', stage/'audio.mp3'
+            video.write_bytes(b'new video')
+            audio.write_bytes(b'new audio')
+            existing=root/'A clip.mp3'
+            existing.write_bytes(b'previous audio')
+            saved_video, saved_audio=publish_pair(video,audio,root,'A clip')
+            self.assertEqual(saved_video.name,'A clip (2).mp4')
+            self.assertEqual(saved_audio.name,'A clip (2).mp3')
+            self.assertEqual(existing.read_bytes(),b'previous audio')
+            self.assertFalse((root/'A clip.mp4').exists())
+            self.assertEqual(saved_video.read_bytes(),b'new video')
+            self.assertEqual(saved_audio.read_bytes(),b'new audio')
 
 
 if __name__=='__main__':unittest.main()

@@ -14,7 +14,7 @@ from core import Cancelled, download, safe_error
 
 MAX_MESSAGE = 256 * 1024
 MAX_PENDING = 4
-HOST_VERSION = "0.1.0"
+HOST_VERSION = "0.2.0"
 
 
 def read_exact(stream, count):

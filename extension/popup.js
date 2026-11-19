@@ -28,13 +28,15 @@ async function renderJobs() {
       card.append(cancel);
     }
     card.append(el('div',job.title || 'Video','job-title'));
-    let label = job.status === 'complete' ? `Saved · ${job.quality || 'Best available quality'}`
+    let label = job.status === 'complete' ? `Saved${job.audioFilename ? ' MP4 + MP3' : ''} · ${job.quality || 'Best available quality'}`
       : job.status === 'error' ? job.error
       : job.status === 'cancelled' ? 'Cancelled'
       : job.status === 'merging' ? 'Combining the video and audio…'
+      : job.status === 'exporting' ? 'Saving MP4 with sound + MP3…'
       : job.status === 'queued' ? 'Queued'
       : job.percent != null ? `Downloading · ${Math.round(job.percent)}%` : 'Finding the best quality…';
     if (job.status === 'complete' && job.filename) label += ` · ${job.filename}`;
+    if (job.status === 'complete' && job.audioFilename) label += ` · ${job.audioFilename}`;
     card.append(el('div',label,'job-status' + (job.status === 'error' ? ' error' : '')));
     if (job.status === 'downloading') {
       const progress = document.createElement('progress'); progress.max=100;

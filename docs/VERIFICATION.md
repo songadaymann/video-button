@@ -1,5 +1,20 @@
 # Verification — 2026-11-19
 
+## MP4 + MP3 update (v0.2.0)
+
+Every successful download now saves a matching MP4 with sound and a 320 kbps MP3. The installer's default is the main `~/Downloads` folder; the existing Mac helper was explicitly configured to that folder. No existing downloaded files were moved or deleted.
+
+- Five Node tests and seven Python tests pass, including preserving existing downloads when publishing a numbered MP4/MP3 pair.
+- Real native-host/yt-dlp/FFmpeg integration: selected the 720p track over a 360p alternative, saved an MP4 with AAC sound and a separate 320 kbps MP3. Both outputs were decoded and checked for a nonzero audio signal.
+- VP9/Opus WebM: VP9 video preserved in MP4, Opus converted to AAC for that MP4, separate MP3 verified with audible signal.
+- VP8/Opus WebM: unsupported MP4 video codec converted to H.264 at the original 320×180 resolution, plus AAC sound and MP3; both sound tracks verified.
+- A repeated download preserved the first pair and produced a second matching numbered pair. Temporary sources were removed. A silent source returned an error without claiming audio exports or leaving partial files.
+- The updated installed helper reports v0.2.0 and the main Downloads directory through its native handshake. Existing Chrome/helper connections require a Chrome restart or extension reload to activate the update.
+
+The browser-installation limitation described below still applies; these tests verify the actual native pipeline and source-level extension checks, not a live installed-extension interaction.
+
+## Initial v0.1.0 verification (historical)
+
 Versions: macOS/Apple Silicon, Python 3.11.17, Node.js 22.23.4, yt-dlp 2026.10.26, yt-dlp-ejs 0.8.0, FFmpeg/ffprobe 9.0.2.
 
 ## Automated checks

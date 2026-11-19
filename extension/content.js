@@ -32,7 +32,7 @@
       const button = document.createElement('button');
       button.type = 'button';
       button.textContent = '↓ Download video';
-      button.title = 'Download the best available video and audio';
+      button.title = 'Save MP4 with sound + MP3 to Downloads';
       const item = { video, button, jobId: null };
       button.addEventListener('click', async event => {
         // Page scripts cannot trigger a native download by dispatching synthetic clicks.
@@ -106,8 +106,9 @@
         : job.status === 'error' ? 'Try again'
         : job.status === 'cancelled' ? '↓ Download video'
         : job.status === 'merging' ? 'Combining audio…'
+        : job.status === 'exporting' ? 'Saving MP4 + MP3…'
         : job.percent != null ? `Downloading ${Math.round(job.percent)}%` : 'Finding best quality…';
-      item.button.title = job.error || job.filename || 'Download the best available video and audio';
+      item.button.title = job.error || (job.audioFilename ? `${job.filename}\n${job.audioFilename}` : job.filename) || 'Save MP4 with sound + MP3 to Downloads';
       if (['complete', 'error', 'cancelled'].includes(job.status)) {
         item.jobId = null;
         if (job.status === 'complete') setTimeout(() => { item.button.textContent = '↓ Download video'; delete item.button.dataset.state; }, 7000);

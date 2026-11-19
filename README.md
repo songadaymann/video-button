@@ -1,6 +1,6 @@
 # Video Button
 
-A personal Chrome extension that adds **Download video** to visible video players. One click asks a local [yt-dlp](https://github.com/yt-dlp/yt-dlp) helper for the best available video and audio; [FFmpeg](https://ffmpeg.org/) combines separate tracks without re-encoding. Files stay on your computer. No account, paid API, cloud downloader, analytics, or public Chrome Web Store listing is required.
+A personal Chrome extension that adds **Download video** to visible video players. One click asks a local [yt-dlp](https://github.com/yt-dlp/yt-dlp) helper for the best available video and audio, then [FFmpeg](https://ffmpeg.org/) saves **an MP4 with sound and a separate 320 kbps MP3**. Files stay on your computer. No account, paid API, cloud downloader, analytics, or public Chrome Web Store listing is required.
 
 Source: <https://github.com/songadaymann/video-button>. This is a locally installed extension, not a hosted app.
 
@@ -19,7 +19,7 @@ brew install python node ffmpeg
 
 Keep Developer mode enabled. Keep the extension folder in place; Chrome reads it directly. The helper is copied into your user application-support folder, so it does not need a server running in a Terminal window.
 
-The default download folder is `~/Downloads/Video Button`. Set a different folder when installing:
+Both files go directly into your main **`~/Downloads`** folder by default, with matching names such as `Video title [id].mp4` and `Video title [id].mp3`. Existing files are preserved; repeat downloads get numbered names. Set a different folder when installing:
 
 ```sh
 python3 scripts/install.py --folder '/path/to/videos'
@@ -35,11 +35,13 @@ Linux Chrome is also supported by the command-line installer, provided Python, N
 - In scrolling feeds, the extension looks for the clicked video's individual post link. If that is unavailable or a carousel selects the wrong item, open the individual video/post page and try there. Feed layouts and closed shadow-root/custom players can prevent automatic matching.
 - For private/login-only videos that you can already access, open Settings and enable **Use my Chrome sign-in for downloads**. This is off by default. macOS may ask for Chrome's Keychain item. You can optionally specify `Default` or `Profile 1`, etc.; find that folder name at the end of Chrome's Profile Path in `chrome://version`.
 
-Two downloads can run at once, with up to four total running/queued. Keep Chrome open until they finish. Cancelled downloads may leave partial files for resuming on retry. Download history is kept only for this browser session; up to 30 finished entries are retained.
+Two downloads can run at once, with up to four total running/queued. Keep Chrome open until they finish. Temporary source files are removed after completion, cancellation, or errors; only the finished MP4/MP3 pair is placed in Downloads. Download history is kept only for this browser session; up to 30 finished entries are retained.
 
 ## What “best available” means
 
-The helper uses yt-dlp's `bestvideo*+bestaudio/best` selector, prioritizing resolution and frame rate. It fetches separate video/audio tracks when available and uses FFmpeg to combine them. It does **not** cap quality to the playback setting, favor MP4 at the expense of resolution, or re-encode. Output can be MP4, WebM, or MKV depending on the original codecs. A site's available renditions can depend on sign-in, account, region, device, and current extractor support.
+The helper uses yt-dlp's `bestvideo*+bestaudio/best` selector, prioritizing resolution and frame rate. It fetches separate tracks when available, even if the highest-quality source is WebM. Video codecs that fit MP4 (H.264, HEVC, AV1, VP9, MPEG-4) are copied without re-encoding. Other video codecs are converted to H.264 at their original resolution/frame rate (padding an odd dimension by one pixel when required). AAC sound is copied; other audio is converted to AAC for the MP4. The separate 320 kbps MP3 comes directly from the downloaded source audio, avoiding an extra AAC conversion step.
+
+The MP3 and any codec conversions are lossy; converting does not improve the original source. The helper does not cap video quality to the playback setting or choose a lower-resolution stream just because it is already MP4. If the source has no audio, it reports that it cannot produce an MP4 with sound and an MP3. A site's available renditions can depend on sign-in, account, region, device, and current extractor support.
 
 YouTube, X/Twitter, TikTok, Instagram, and many other sites have upstream yt-dlp extractors. That is a capability target, not a claim that every video on those sites was tested or will download. Site changes, anti-bot checks, inaccessible content, DRM, and some live players can prevent downloading. The extension does not remove DRM or grant access to videos you cannot access.
 
@@ -79,7 +81,7 @@ For the real adaptive-stream integration test, run the following with a Python e
 python3 scripts/smoke_test.py
 ```
 
-It synthesizes two video qualities and separate audio, serves them temporarily over loopback, downloads through the native host's framing/queue and real yt-dlp/FFmpeg, and verifies that the higher-quality video and audio are present in one file. Its test-only URL patch allows the loopback fixture; the production helper rejects loopback URLs. Temporary media is deleted afterwards.
+It synthesizes two video qualities and separate audio, serves them temporarily over loopback, and downloads through the native host's framing/queue and real yt-dlp/FFmpeg. It checks that the higher-quality video is saved in MP4 with audible sound and that a matching 320 kbps MP3 contains audible sound. It also tests VP9/Opus WebM, VP8 conversion, numbered repeat downloads, silent-source errors, and temporary-file cleanup. Its test-only URL patch allows the loopback fixture; the production helper rejects loopback URLs. Temporary media is deleted afterwards.
 
 ## License
 

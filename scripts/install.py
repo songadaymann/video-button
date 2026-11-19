@@ -72,7 +72,7 @@ def main():
     for name in ("host.py", "core.py"):
         shutil.copy2(ROOT/"native"/name, home/name)
     existing = json.loads((home/"config.json").read_text()) if (home/"config.json").exists() else {}
-    folder = args.folder or Path(existing.get("folder", str(Path.home()/"Downloads/Video Button")))
+    folder = args.folder or Path(existing.get("folder", str(Path.home()/"Downloads")))
     folder = folder.expanduser().resolve()
     folder.mkdir(parents=True, exist_ok=True)
     config = {"extensionId": extension_id(), "folder": str(folder), "ffmpeg": ffmpeg, "ffprobe": ffprobe, "node": node}

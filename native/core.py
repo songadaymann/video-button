@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import ipaddress
+import os
 import math
 import re
 import json
 import subprocess
 import threading
+import tempfile
 import time
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -72,6 +74,7 @@ def make_options(config: dict, target: dict, use_cookies: bool, profile: str,
     options = {
         "format": "bestvideo*+bestaudio/best",
         "format_sort": ["res", "fps"],
+        "merge_output_format": "mkv",  # Lossless intermediate; final exports are MP4 + MP3.
         "noplaylist": True,
         "playlist_items": str(index),
         "paths": {"home": str(folder)},
@@ -103,7 +106,105 @@ def make_options(config: dict, target: dict, use_cookies: bool, profile: str,
     return options
 
 
-def download(config: dict, request: dict, cancel: threading.Event, emit) -> None:
+def probe_media(config: dict, path: Path) -> dict:
+    ffprobe = config.get("ffprobe") or str(Path(config["ffmpeg"]).resolve().with_name("ffprobe"))
+    result = subprocess.run([ffprobe, "-v", "error", "-show_streams", "-of", "json", str(path)],
+                            check=True, capture_output=True, text=True, timeout=30)
+    return json.loads(result.stdout)
+
+
+def run_ffmpeg(config: dict, arguments: list[str], cancel: threading.Event) -> None:
+    if cancel.is_set():
+        raise Cancelled()
+    # A file keeps stderr bounded in memory even during a long conversion.
+    with tempfile.TemporaryFile() as errors:
+        process = subprocess.Popen([config["ffmpeg"], "-hide_banner", "-loglevel", "error", "-nostdin", "-y", *arguments],
+                                   stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=errors)
+        try:
+            while process.poll() is None:
+                if cancel.wait(.15):
+                    raise Cancelled()
+            if cancel.is_set():
+                raise Cancelled()
+            if process.returncode:
+                errors.seek(0, 2)
+                errors.seek(max(0, errors.tell() - 4000))
+                raise RuntimeError("Could not save MP4 and MP3: " + safe_error(errors.read().decode("utf-8", "replace")))
+        finally:
+            if process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+
+
+def publish_pair(mp4: Path, mp3: Path, folder: Path, stem: str) -> tuple[Path, Path]:
+    # Both staged files live on the same filesystem as Downloads. Hard links
+    # publish complete files without replacing an existing file or symlink.
+    for number in range(1, 10001):
+        name = stem if number == 1 else f"{stem} ({number})"
+        video, audio = folder / f"{name}.mp4", folder / f"{name}.mp3"
+        linked_video = False
+        try:
+            os.link(mp4, video)
+            linked_video = True
+            os.link(mp3, audio)
+            return video, audio
+        except FileExistsError:
+            if linked_video:
+                video.unlink()
+        except OSError:
+            if linked_video:
+                video.unlink()
+            raise
+    raise RuntimeError("Too many files already use this video's name.")
+
+
+def export_pair(config: dict, source: Path, workspace: Path, cancel: threading.Event, emit) -> tuple[Path, Path, dict]:
+    streams = probe_media(config, source).get("streams", [])
+    video = next((s for s in streams if s.get("codec_type") == "video" and not s.get("disposition", {}).get("attached_pic")), None)
+    audio = next((s for s in streams if s.get("codec_type") == "audio"), None)
+    if not video:
+        raise RuntimeError("The site did not return a video track.")
+    if not audio:
+        raise RuntimeError("This video has no audio track, so an MP4 with sound and an MP3 cannot be created.")
+    emit(status="exporting", percent=None)
+    mp4, mp3 = workspace / "export.mp4", workspace / "export.mp3"
+    arguments = ["-i", str(source), "-map", f"0:{video['index']}", "-map", f"0:{audio['index']}"]
+    # Keep the highest-quality video packets when the codec fits MP4. Only
+    # unsupported codecs are converted, at the original resolution/frame rate.
+    codec = video.get("codec_name")
+    if codec in {"h264", "hevc", "av1", "vp9", "mpeg4"}:
+        arguments += ["-c:v", "copy"]
+        if codec == "hevc":
+            arguments += ["-tag:v", "hvc1"]
+    else:
+        arguments += ["-c:v", "libx264", "-crf", "18", "-preset", "medium", "-pix_fmt", "yuv420p",
+                      "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2"]
+    if audio.get("codec_name") == "aac":
+        arguments += ["-c:a", "copy"]
+    else:
+        arguments += ["-c:a", "aac", "-b:a", "512k" if audio.get("channels", 2) > 2 else "320k"]
+    arguments += ["-movflags", "+faststart", str(mp4),
+                  "-map", f"0:{audio['index']}", "-vn", "-c:a", "libmp3lame", "-b:a", "320k", "-ar", "48000",
+                  "-ac", "1" if audio.get("channels") == 1 else "2", "-id3v2_version", "3", str(mp3)]
+    run_ffmpeg(config, arguments, cancel)
+    saved_streams = probe_media(config, mp4).get("streams", [])
+    saved_video = next((s for s in saved_streams if s.get("codec_type") == "video"), None)
+    if not saved_video or not any(s.get("codec_type") == "audio" for s in saved_streams):
+        raise RuntimeError("The MP4 export is missing its video or sound.")
+    mp3_streams = probe_media(config, mp3).get("streams", [])
+    if not any(s.get("codec_name") == "mp3" for s in mp3_streams):
+        raise RuntimeError("The MP3 export could not be verified.")
+    if cancel.is_set():
+        raise Cancelled()
+    video_path, audio_path = publish_pair(mp4, mp3, Path(config["folder"]).expanduser().resolve(), source.stem)
+    return video_path, audio_path, saved_video
+
+
+def _download(config: dict, request: dict, cancel: threading.Event, emit, workspace: Path) -> None:
     from yt_dlp import YoutubeDL
     target = request.get("target")
     if not isinstance(target, dict):
@@ -119,6 +220,7 @@ def download(config: dict, request: dict, cancel: threading.Event, emit) -> None
     completed: list[Path] = []
     metadata: dict = {}
     warnings: list[str] = []
+    working_config = {**config, "folder": str(workspace)}
 
     def check_cancel():
         if cancel.is_set():
@@ -157,12 +259,12 @@ def download(config: dict, request: dict, cancel: threading.Event, emit) -> None
         check_cancel()
         path = Path(filename).resolve()
         # yt-dlp sanitizes the filename; only accept results inside the chosen folder.
-        path.relative_to(Path(config["folder"]).expanduser().resolve())
+        path.relative_to(workspace)
         if path.is_file():
             completed.append(path)
 
     def extract(source, fallback=False):
-        options = make_options(config, {**target, "itemIndex": 1} if fallback else target,
+        options = make_options(working_config, {**target, "itemIndex": 1} if fallback else target,
                                request.get("useCookies") is True,
                                request.get("chromeProfile") or "", progress, postprocessor, finished, Logger())
         if fallback:
@@ -194,20 +296,19 @@ def download(config: dict, request: dict, cancel: threading.Event, emit) -> None
         extract(media, fallback=True)
     if not completed:
         raise RuntimeError("The site returned no saved video. It may be DRM protected or require a sign-in.")
-    # Site format labels can disagree with the delivered file (especially portrait
-    # video). Report the actual saved dimensions rather than promising its label.
-    ffprobe = config.get("ffprobe") or str(Path(config["ffmpeg"]).resolve().with_name("ffprobe"))
-    try:
-        probe = subprocess.run([ffprobe, "-v", "error", "-select_streams", "v:0",
-                                "-show_entries", "stream=width,height,avg_frame_rate", "-of", "json",
-                                str(completed[-1])], check=True, capture_output=True, text=True, timeout=15)
-        stream = json.loads(probe.stdout)["streams"][0]
-        metadata.update({"width": stream["width"], "height": stream["height"]})
-        numerator, denominator = stream.get("avg_frame_rate", "0/1").split("/")
-        if float(denominator):
-            metadata["fps"] = float(numerator) / float(denominator)
-    except (OSError, subprocess.SubprocessError, ValueError, KeyError, IndexError):
-        pass  # The video is already saved; metadata probing must not lose it.
-    check_cancel()
-    emit(status="complete", percent=100, filename=completed[-1].name,
+    video, audio, stream = export_pair(config, completed[-1], workspace, cancel, emit)
+    metadata.update({"width": stream["width"], "height": stream["height"]})
+    numerator, denominator = stream.get("avg_frame_rate", "0/1").split("/")
+    if float(denominator):
+        metadata["fps"] = float(numerator) / float(denominator)
+    emit(status="complete", percent=100, filename=video.name, audioFilename=audio.name,
          quality=quality_label(metadata, fallback), title=metadata.get("title", target.get("title", "Video")))
+
+
+def download(config: dict, request: dict, cancel: threading.Event, emit) -> None:
+    folder = Path(config["folder"]).expanduser().resolve()
+    folder.mkdir(parents=True, exist_ok=True)
+    # Incomplete/source files are temporary. Only the finished MP4 + MP3 pair is
+    # published into Downloads; cancellation/error removes the intermediates.
+    with tempfile.TemporaryDirectory(prefix=".video-button-", dir=folder) as temporary:
+        _download(config, request, cancel, emit, Path(temporary).resolve())
